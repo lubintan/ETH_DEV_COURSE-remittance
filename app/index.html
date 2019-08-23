@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<title>REMITTANCE</title>
+<meta charset="utf-8">
+
+</head>
+<body>
+
+<div>REMITTANCE</div>
+<div>Lubin Tan</div>
+<br>
+<br>
+<br>
+<div>
+    <button id="GenCode">Generate Codes</button> <br>
+    Code A: <span id="codeA"> NA</span><br>
+    Code B: <span id="codeB"> NA</span><br>
+    Hash Status: <span id="hashStatus"> NA</span><br>
+</div>
+<br>
+<br>
+<div>
+    Remit From: <select id="remitAddr"></select><br>
+    Amount: <input name="amount" type="number" placeholder="0" /> Wei <br>
+    Remit Using Hash: <span id="hashed"> NA</span><br>
+    <button id="Remit">Remit</button> <br>
+    Remit Status: <span id="remitStatus"> NA</span><br>
+
+</div>
+<br>
+<div>
+    Remit Event Emitted <br>
+    Remit From: <span id="logRemitFrom">NA</span><br>
+    Remit Hash: <span id="logRemitHash">NA</span><br>
+    Remit Amount: <span id="logRemitValue">NA</span> Wei<br>
+    Remit Timestamp:<span id="logRemitTimestamp">NA</span><br>
+</div>
+<br>
+<br>
+<div>
+    Retrieve <br>
+    Address: <select id="retrieveAddr"></select><br>
+    Code A: <input name="inputCodeA" type="string" placeholder="code A" /><br>
+    Code A: <input name="inputCodeB" type="string" placeholder="code B" /><br>
+    <button id="Retrieve">Retrieve</button><br>
+    Retrieve Status: <span id="retrieveStatus">NA</span><br>
+</div>
+<br>
+<div>
+    Retrieve Event Emitted<br>
+    Retriever: <span id="logRetrieveFrom">NA</span><br>
+    Retrieving Hash: <span id="logRetrieveHash">NA</span><br>
+    Retrieve Amount: <span id="logRetrieveValue">NA</span> Wei<br>
+    Retrieve Timestamp: <span id="logRetrieveTimestamp">NA</span> Wei<br>
+</div>
+<br>
+<div>
+    Check Address Balance <br>
+    Address: <select id="checkBal"></select><br>
+    <button id="Check">Check</button><br>
+    Balance: <span id="balance">0</span><br>
+</div>
+<br>
+<br>
+<!-- <div>
+    KILL<br>
+    Warning: Irreversible Action!<br>
+    Kill From: <select id="killAddr"></select><br>
+    <button id="Kill">KILL</button><br>
+    Kill Status: <span id="killStatus">NA</span><br>
+    <br>
+    Killed Withdrawal<br>
+    Withdraw From: <select id="killedWithdrawAddr"></select><br>
+    <button id="KilledWithdraw">KILL</button><br>
+    Killed Withdraw Status: <span id="killWithdrawStatus">NA</span><br>
+</div>
+<div>
+    Killed Wtihdraw Event Emitted<br>
+    From: <span id="logKilledWithdrawalAccount">NA</span><br>
+    Value: <span id="logKilledWithdrawalValue">NA</span><br>
+</div> -->
+
+<script src="js/app.js"></script>
+
+</body>
+</html>
