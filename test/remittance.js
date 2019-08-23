@@ -14,9 +14,24 @@ async function gasCost(tx) {
 	return gasPrice.mul(gasUsed);
 }
 
+const timeTravel = function (time) {
+	return new Promise((resolve, reject) => {
+	  web3.currentProvider.send({
+		jsonrpc: "2.0",
+		method: "evm_increaseTime",
+		params: [time], // 86400 is num seconds in day
+		id: new Date().getTime()
+	  }, (err, result) => {
+		if(err){ return reject(err) }
+		return resolve(result)
+	  });
+	})
+  }
+
 contract('Remittance', function(accounts){
 	
 	const [alice,bob,carol] = accounts;
+	const defaultDeadline = 3600; //1 hour
 	let remitCont;
 
 	beforeEach("new contract deployment", async () => {
@@ -30,6 +45,38 @@ contract('Remittance', function(accounts){
 	associated gas costs.
 	*/
 
+	it ("Reverts retrieve if deadline passed.", async () => {
+        const amountToSend = bigNum(5e8);
+        const codeA = generator();
+		const codeB = generator();
+		const hashed = await remitCont.hashIt(codeA, codeB);
+
+        let tx = await remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend });
+		await timeTravel(3600*48 + 1);
+		await truffleAssert.reverts(remitCont.retrieve(codeA, codeB, { from: carol }));
+	})
+	
+	it ("Allows retrieve by original remitter if deadline passed.", async () => {
+		const amountToSend = bigNum(5e8);
+		const codeA = generator();
+		const codeB = generator();
+		const hashed = await remitCont.hashIt(codeA, codeB);
+
+		let tx = await remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend });
+		await truffleAssert.eventEmitted(tx, 'LogRemit');
+		await timeTravel(3600*48 + 1);
+
+		const aliceInitial = bigNum(await web3.eth.getBalance(alice));
+		tx = await remitCont.retrieve(codeA, codeB, { from: alice });
+		await truffleAssert.eventEmitted(tx, 'LogRetrieve');
+
+		const aliceGasCost = await gasCost(tx);
+		const aliceFinal = bigNum(await web3.eth.getBalance(alice));
+		
+		assert.strictEqual(aliceInitial.sub(aliceGasCost).toString(10),
+			aliceFinal.sub(amountToSend).toString(10), 'Expected balance incorrect.');
+	})
+
 	it ("Reverts 0 value remit.", async () => {
         const amountToSend = bigNum(0);
         const codeA = generator();
@@ -37,7 +84,7 @@ contract('Remittance', function(accounts){
 		const hashed = await remitCont.hashIt(codeA, codeB);
 		// const hashed = web3.utils.soliditySha3(codeA, codeB);
 
-		await truffleAssert.reverts(remitCont.remit(hashed, { from: alice, value: amountToSend }));
+		await truffleAssert.reverts(remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend }));
 	});
 	
 	it ("Reverts 0 value retrieve.", async () => {
@@ -53,18 +100,18 @@ contract('Remittance', function(accounts){
 		const codeB = generator();
 		const hashed = await remitCont.hashIt(codeA, codeB);
 
-		await remitCont.remit(hashed, { from: alice, value: amountToSend });
-		await truffleAssert.reverts(remitCont.remit(hashed, { from: alice, value: bigNum(7e8) }));
+		await remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend });
+		await truffleAssert.reverts(remitCont.remit(hashed, defaultDeadline, { from: alice, value: bigNum(7e8) }));
 	})
     
-    it ("Can remit properly.", async () => {
-        const amountToSend = bigNum(5.77e12);
+    it ("Can remit and retrieve properly.", async () => {
+        const amountToSend = bigNum(5e8);
         const codeA = generator();
 		const codeB = generator();
 		const hashed = await remitCont.hashIt(codeA, codeB);
 		// const hashed = web3.utils.soliditySha3(codeA, codeB);
 
-        let tx = await remitCont.remit(hashed, { from: alice, value: amountToSend });
+        let tx = await remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend });
 		// await truffleAssert.prettyPrintEmittedEvents(tx);
 		await truffleAssert.eventEmitted(tx, 'LogRemit');
 
@@ -87,7 +134,7 @@ contract('Remittance', function(accounts){
 		const hashed = await remitCont.hashIt(codeA, codeB);
 		// const hashed = web3.utils.soliditySha3(codeA, codeB);
 		
-		await remitCont.remit(hashed, { from: alice, value: amountToSend });
+		await remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend });
 		await remitCont.pause({ from: alice});
 		await truffleAssert.reverts(remitCont.retrieve(codeA, codeB, { from: carol }));
 	});
@@ -100,7 +147,7 @@ contract('Remittance', function(accounts){
 		// const hashed = web3.utils.soliditySha3(codeA, codeB);
 
 		await remitCont.pause({ from: alice });
-		await truffleAssert.reverts(remitCont.remit(hashed, { from: alice, value: amountToSend }));
+		await truffleAssert.reverts(remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend }));
 	});
 
 	it ("Reverts killing when contract is not paused.", async () => {
@@ -131,7 +178,7 @@ contract('Remittance', function(accounts){
 		const hashed = await remitCont.hashIt(codeA, codeB);
 		// const hashed = web3.utils.soliditySha3(codeA, codeB);
 		
-		await remitCont.remit(hashed, {from: alice, value: amountToSend});
+		await remitCont.remit(hashed, defaultDeadline, {from: alice, value: amountToSend});
 		await remitCont.pause({ from: alice });
 		await remitCont.kill({ from: alice });
 		
@@ -151,12 +198,12 @@ contract('Remittance', function(accounts){
 		const hashed = await remitCont.hashIt(codeA, codeB);
 		// const hashed = web3.utils.soliditySha3(codeA, codeB);
 		
-		await remitCont.remit(hashed, {from: alice, value: amountToSend});
+		await remitCont.remit(hashed, defaultDeadline, {from: alice, value: amountToSend});
 		await remitCont.pause({ from: alice });		
 		await remitCont.kill({ from: alice });
 		await remitCont.unpause({ from: alice });		
 
 		await truffleAssert.reverts(remitCont.retrieve(codeA, codeB, { from: carol }));
-		await truffleAssert.reverts(remitCont.remit(hashed, { from: alice }));
+		await truffleAssert.reverts(remitCont.remit(hashed, defaultDeadline, { from: alice }));
 	});
 })
