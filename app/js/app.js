@@ -101,7 +101,7 @@ const remitAction = async() => {
                         $("#logRemitFrom").html(receipt.logs[0].args.remitter);
                         $("#logRemitHash").html(receipt.logs[0].args.hashCode);
                         $("#logRemitValue").html(receipt.logs[0].args.value.toString(10));
-                        $("#logRemitTimestamp").html(receipt.logs[0].args.timestamp.toString(10));
+                        $("#logRemitTimestamp").html(receipt.logs[0].args.deadline.toString(10));
                     } else {
                         $("#logRemitFrom").html("NA");
                         $("#logRemitHash").html("NA");
@@ -195,7 +195,7 @@ const retrieveAction = async() =>{
                         $("#logRetrieveFrom").html(receipt.logs[0].args.retriever);
                         $("#logRetrieveHash").html(receipt.logs[0].args.hashCode);
                         $("#logRetrieveValue").html(receipt.logs[0].args.value.toString(10));
-                        $("#logRetrieveTimestamp").html(receipt.logs[0].args.timestamp.toString(10));
+                        $("#logRetrieveTimestamp").html(receipt.logs[0].args.deadline.toString(10));
                     } else {
                         $("#logRetrieveFrom").html("NA");
                         $("#logRetrieveHash").html("NA");

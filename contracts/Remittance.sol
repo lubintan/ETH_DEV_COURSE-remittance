@@ -9,17 +9,17 @@ contract Remittance is Killable{
 
 	struct Entry
     {
-        uint256 value;
-        uint timestamp;
-		uint32 deadline;
-		address remitter;
+		uint256 value;
+		uint256 deadline;
+		address sender;
     }
 
-    mapping (bytes32 => Entry) remittedMap;
-	uint32 maxDeadline = 172800; // 2days;
+    mapping (bytes32 => Entry) remittances;
+	uint256 maxDeadline = 172800; // 2days;
 
-	event LogRemit(address indexed remitter, bytes32 indexed hashCode, uint256 indexed value, uint timestamp, uint32 deadline);
-	event LogRetrieve(address indexed retriever, bytes32 indexed hashCode, uint256 indexed value, uint timestamp);
+
+	event LogRemit(address indexed sender, bytes32 indexed hashCode, uint256 indexed value, uint256 deadline);
+	event LogRetrieve(address indexed retriever, bytes32 indexed hashCode, uint256 indexed value);
 	event LogKilledWithdrawal(address indexed account, uint256 indexed value);
 
 	using SafeMath for uint256;
@@ -29,53 +29,55 @@ contract Remittance is Killable{
     public
     {}
 
-    function remit(bytes32 hashed, uint32 deadline)
+    function remit(bytes32 hashed, uint256 deadline)
         public
 		payable
-		whenNotKilled
+		whenAlive
 		whenNotPaused
         returns (bool)
     {
-        require(msg.value > 0, "Cannot remit 0.");
-		require(remittedMap[hashed].value == 0, "Cannot overwrite unretreived value.");
+		require(msg.value > 0, "Cannot remit 0.");
+		require(remittances[hashed].value == 0, "Cannot overwrite unretreived value.");
 		require(deadline <= maxDeadline, "Deadline exceeds maximum allowed.");
+		require(remittances[hashed].deadline == 0, "Hash has been used before.");
         Entry memory remitted;
 		remitted.value = msg.value;
-		remitted.timestamp = now;
-		remitted.deadline = deadline;
-		remitted.remitter = msg.sender;
-		remittedMap[hashed] = remitted;
+		remitted.deadline = deadline.add(now);
+		remitted.sender = msg.sender;
+		remittances[hashed] = remitted;
 
-        emit LogRemit(msg.sender, hashed, msg.value, now, deadline);
+        emit LogRemit(msg.sender, hashed, msg.value, remitted.deadline);
         return true;
     }
 
     function retrieve(string memory codeA, string memory codeB)
         public
-		whenNotKilled
+		whenAlive
 		whenNotPaused
     {
         bytes32 hashed = hashIt(codeA, codeB);
-        Entry memory remitted = remittedMap[hashed];
+        Entry memory remitted = remittances[hashed];
 		uint256 value = remitted.value;
         require(value > 0, "Nothing to retrieve.");
-		require((now <= (remitted.timestamp + remitted.deadline)
-					|| (remitted.remitter == msg.sender)),
-						"Code expired. Only remitter can retrieve.");
+		if (now >= remitted.deadline) {
+			require(msg.sender == remitted.sender, 'Code expired. Only sender can retrieve.');
+		}else {
+			require (msg.sender != remitted.sender, 'Sender cannot retrieve before code expires.');
+		}
 
 		remitted.value = 0;
-		remittedMap[hashed] = remitted;
+		remittances[hashed] = remitted;
 
-		emit LogRetrieve(msg.sender, hashed, value, now);
+		emit LogRetrieve(msg.sender, hashed, value);
 		msg.sender.transfer(value);
     }
 
 	function hashIt(string memory codeA, string memory codeB)
 		public
-		pure
+		view
 		returns (bytes32)
 	{
-		return keccak256(abi.encodePacked(codeA, codeB));
+		return keccak256(abi.encodePacked(codeA, codeB, address(this)));
 	}
 
 	function killedWithdrawal()

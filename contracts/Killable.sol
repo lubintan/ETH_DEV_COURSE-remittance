@@ -26,7 +26,7 @@ contract Killable is Pausable{
 		emit LogKilled(msg.sender);
 	}
 
-	modifier whenNotKilled()
+	modifier whenAlive()
 	{
 		require(!killed, "Killable: killed");
 		_;
