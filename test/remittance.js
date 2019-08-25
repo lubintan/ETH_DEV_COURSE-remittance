@@ -30,12 +30,12 @@ const timeTravel = function (time) {
 
 contract('Remittance', function(accounts){
 	
-	const [alice,bob,carol] = accounts;
+	const [alice, bob, carol, david] = accounts;
 	const defaultDeadline = 3600; //1 hour
 	let remitCont;
-
+	
 	beforeEach("new contract deployment", async () => {
-		remitCont = await Remittance.new({ from: alice });
+		remitCont = await Remittance.new({ from: david });
 	});
 
 	/*
@@ -46,11 +46,10 @@ contract('Remittance', function(accounts){
 	*/
 
 	it ("Same inputs give different hash for different contracts", async() =>{
-		const remitCont2 = await Remittance.new({ from: bob });
+		const remitCont2 = await Remittance.new({ from: david });
         const codeA = generator();
-		const codeB = generator();
-		const hashed = await remitCont.hashIt(codeA, codeB);
-		const hashed2 = await remitCont2.hashIt(codeA, codeB);
+		const hashed = await remitCont.hashIt(codeA, bob);
+		const hashed2 = await remitCont2.hashIt(codeA, bob);
 
 		assert.notEqual(hashed, hashed2, "Same inputs give SAME hash for different contracts.");
 	});
@@ -58,38 +57,35 @@ contract('Remittance', function(accounts){
 	it ("Reverts retrieve if deadline passed.", async () => {
         const amountToSend = bigNum(5e8);
         const codeA = generator();
-		const codeB = generator();
-		const hashed = await remitCont.hashIt(codeA, codeB);
+		const hashed = await remitCont.hashIt(codeA, carol);
 
         let tx = await remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend });
 		await timeTravel(3600*48 + 1);
-		await truffleAssert.reverts(remitCont.retrieve(codeA, codeB, { from: carol }));
+		await truffleAssert.reverts(remitCont.retrieve(codeA, { from: carol }));
 	});
 
-	it ("Reverts original remitter retrieve before deadline.", async () => {
+	it ("Reverts original remitter cancel before deadline.", async () => {
 		const amountToSend = bigNum(5e8);
         const codeA = generator();
-		const codeB = generator();
-		const hashed = await remitCont.hashIt(codeA, codeB);
+		const hashed = await remitCont.hashIt(codeA, carol);
 
         let tx = await remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend });
 		await timeTravel(1800);
-		await truffleAssert.reverts(remitCont.retrieve(codeA, codeB, { from: alice }));
+		await truffleAssert.reverts(remitCont.cancel(hashed, { from: alice }));
 	});
 	
-	it ("Allows retrieve by original remitter if deadline passed.", async () => {
+	it ("Allows cancel by original remitter if deadline passed.", async () => {
 		const amountToSend = bigNum(5e8);
 		const codeA = generator();
-		const codeB = generator();
-		const hashed = await remitCont.hashIt(codeA, codeB);
+		const hashed = await remitCont.hashIt(codeA, carol);
 
 		let tx = await remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend });
 		await truffleAssert.eventEmitted(tx, 'LogRemit');
 		await timeTravel(3600*48 + 1);
 
 		const aliceInitial = bigNum(await web3.eth.getBalance(alice));
-		tx = await remitCont.retrieve(codeA, codeB, { from: alice });
-		await truffleAssert.eventEmitted(tx, 'LogRetrieve');
+		tx = await remitCont.cancel(hashed, { from: alice });
+		await truffleAssert.eventEmitted(tx, 'LogCancel');
 
 		const aliceGasCost = await gasCost(tx);
 		const aliceFinal = bigNum(await web3.eth.getBalance(alice));
@@ -101,25 +97,21 @@ contract('Remittance', function(accounts){
 	it ("Reverts 0 value remit.", async () => {
         const amountToSend = bigNum(0);
         const codeA = generator();
-		const codeB = generator();
-		const hashed = await remitCont.hashIt(codeA, codeB);
-		// const hashed = web3.utils.soliditySha3(codeA, codeB);
+		const hashed = await remitCont.hashIt(codeA, carol);
 
 		await truffleAssert.reverts(remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend }));
 	});
 	
 	it ("Reverts 0 value retrieve.", async () => {
         const codeA = generator();
-        const codeB = generator();
 
-		await truffleAssert.reverts(remitCont.retrieve(codeA, codeB, { from: alice }));
+		await truffleAssert.reverts(remitCont.retrieve(codeA, { from: alice }));
 	});
 	
 	it ("Reverts remit to hash with existing value.", async () =>{
 		const amountToSend = bigNum(5e8);
         const codeA = generator();
-		const codeB = generator();
-		const hashed = await remitCont.hashIt(codeA, codeB);
+		const hashed = await remitCont.hashIt(codeA, carol);
 
 		await remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend });
 		await truffleAssert.reverts(remitCont.remit(hashed, defaultDeadline, { from: alice, value: bigNum(7e8) }));
@@ -128,16 +120,14 @@ contract('Remittance', function(accounts){
     it ("Can remit and retrieve properly.", async () => {
         const amountToSend = bigNum(5e8);
         const codeA = generator();
-		const codeB = generator();
-		const hashed = await remitCont.hashIt(codeA, codeB);
-		// const hashed = web3.utils.soliditySha3(codeA, codeB);
+		const hashed = await remitCont.hashIt(codeA, carol);
 
         let tx = await remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend });
 		// await truffleAssert.prettyPrintEmittedEvents(tx);
 		await truffleAssert.eventEmitted(tx, 'LogRemit');
 
         const carolInitial = bigNum(await web3.eth.getBalance(carol));
-		tx = await remitCont.retrieve(codeA, codeB, { from: carol });
+		tx = await remitCont.retrieve(codeA, { from: carol });
 		// await truffleAssert.prettyPrintEmittedEvents(tx);
 		await truffleAssert.eventEmitted(tx, 'LogRetrieve');
 
@@ -151,13 +141,11 @@ contract('Remittance', function(accounts){
     it ("Reverts if remitting with previously used hash.", async () => {
         const amountToSend = bigNum(5e8);
         const codeA = generator();
-		const codeB = generator();
-		const hashed = await remitCont.hashIt(codeA, codeB);
-		// const hashed = web3.utils.soliditySha3(codeA, codeB);
+		const hashed = await remitCont.hashIt(codeA, carol);
 
 		let tx = await remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend });
 		await timeTravel(1800);
-		tx = await remitCont.retrieve(codeA, codeB, { from: carol });
+		tx = await remitCont.retrieve(codeA, { from: carol });
 		await timeTravel(3600 * 72);
 		truffleAssert.reverts(remitCont.remit(hashed, defaultDeadline, { from: bob, value: amountToSend }));
     });
@@ -165,23 +153,19 @@ contract('Remittance', function(accounts){
 	it ("Reverts retrieving when contract paused.", async () =>{
 		const amountToSend = bigNum(5e8);
 		const codeA = generator();
-		const codeB = generator();
-		const hashed = await remitCont.hashIt(codeA, codeB);
-		// const hashed = web3.utils.soliditySha3(codeA, codeB);
+		const hashed = await remitCont.hashIt(codeA, carol);
 		
 		await remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend });
-		await remitCont.pause({ from: alice});
-		await truffleAssert.reverts(remitCont.retrieve(codeA, codeB, { from: carol }));
+		await remitCont.pause({ from: david });
+		await truffleAssert.reverts(remitCont.retrieve(codeA, { from: carol }));
 	});
 
 	it ("Reverts remitting when contract is paused.", async () =>{
 		const amountToSend = bigNum(5e8);
 		const codeA = generator();
-		const codeB = generator();
-		const hashed = await remitCont.hashIt(codeA, codeB);
-		// const hashed = web3.utils.soliditySha3(codeA, codeB);
+		const hashed = await remitCont.hashIt(codeA, carol);
 
-		await remitCont.pause({ from: alice });
+		await remitCont.pause({ from: david });
 		await truffleAssert.reverts(remitCont.remit(hashed, defaultDeadline, { from: alice, value: amountToSend }));
 	});
 
@@ -190,55 +174,53 @@ contract('Remittance', function(accounts){
 	});
 
 	it ("Reverts killing by non-pauser/owner.", async () => {
-		await remitCont.pause( {from: alice });
+		await remitCont.pause( {from: david });
 		await truffleAssert.reverts(remitCont.kill({ from: carol }));
 	});
 
-	it ("Reverts post-killing retrieve by non-owner.", async () => {
-		await remitCont.pause( {from: alice });
-		await remitCont.kill( {from: alice });
+	it ("Reverts post-killing withdrawal by non-owner.", async () => {
+		await remitCont.pause( {from: david });
+		await remitCont.kill( {from: david });
 		await truffleAssert.reverts(remitCont.killedWithdrawal({ from: carol }));
 	});
 
-	it ("Reverts post-killing retrieve of 0 balance.", async () => {
-		await remitCont.pause({ from: alice });
-		await remitCont.kill({ from: alice });
-		await truffleAssert.reverts(remitCont.killedWithdrawal({ from: alice }));
+	it ("Reverts post-killing withdrawal of 0 balance.", async () => {
+		await remitCont.pause({ from: david });
+		await remitCont.kill({ from: david });
+		await truffleAssert.reverts(remitCont.killedWithdrawal({ from: david }));
 	});
 
-	it ("Post-killing retrieve moves funds to the owner correctly.", async () => {
+	it ("Post-killing withdrawal moves funds to the owner correctly.", async () => {
 		const amountToSend = bigNum(5e8);
 		const codeA = generator();
-		const codeB = generator();
-		const hashed = await remitCont.hashIt(codeA, codeB);
-		// const hashed = web3.utils.soliditySha3(codeA, codeB);
+		const hashed = await remitCont.hashIt(codeA, carol);
 		
 		await remitCont.remit(hashed, defaultDeadline, {from: alice, value: amountToSend});
-		await remitCont.pause({ from: alice });
-		await remitCont.kill({ from: alice });
+		await remitCont.pause({ from: david });
+		await remitCont.kill({ from: david });
 		
-		const aliceBalBefore = bigNum(await web3.eth.getBalance(alice));
-		const tx = await remitCont.killedWithdrawal({ from: alice });	
-		const aliceGasCost = await gasCost(tx);
-		const aliceBalAfter = bigNum(await web3.eth.getBalance(alice));
+		const davidBalBefore = bigNum(await web3.eth.getBalance(david));
+		const tx = await remitCont.killedWithdrawal({ from: david });	
+		const davidGasCost = await gasCost(tx);
+		const davidBalAfter = bigNum(await web3.eth.getBalance(david));
 
-		assert.strictEqual(aliceBalBefore.sub(aliceGasCost).toString(10),
-			aliceBalAfter.sub(amountToSend).toString(10), "Alice's expected balance incorrect.");
+		assert.strictEqual(davidBalBefore.sub(davidGasCost).toString(10),
+			davidBalAfter.sub(amountToSend).toString(10), "David's expected balance incorrect.");
 	});
 
 	it ("Post-killing contract functions revert upon invocation.", async () => {
 		const amountToSend = bigNum(5e8);
 		const codeA = generator();
-		const codeB = generator();
-		const hashed = await remitCont.hashIt(codeA, codeB);
-		// const hashed = web3.utils.soliditySha3(codeA, codeB);
+		const hashed = await remitCont.hashIt(codeA, carol);
 		
 		await remitCont.remit(hashed, defaultDeadline, {from: alice, value: amountToSend});
-		await remitCont.pause({ from: alice });		
-		await remitCont.kill({ from: alice });
-		await remitCont.unpause({ from: alice });		
+		await remitCont.pause({ from: david });		
+		await remitCont.kill({ from: david });
+		await remitCont.unpause({ from: david });		
 
-		await truffleAssert.reverts(remitCont.retrieve(codeA, codeB, { from: carol }));
+		await truffleAssert.reverts(remitCont.retrieve(codeA, { from: carol }));
 		await truffleAssert.reverts(remitCont.remit(hashed, defaultDeadline, { from: alice }));
+		await timeTravel(3600 * 72);
+		await truffleAssert.reverts(remitCont.cancel(hashed, { from: alice }));
 	});
 })

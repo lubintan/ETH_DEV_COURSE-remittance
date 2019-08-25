@@ -4,6 +4,7 @@ import './Killable.sol';
 
 //version: openzeppelin-solidity@2.3.0
 //functions: isPauser(address), addPauser(address), renouncePauser(), pause(), unpause(), paused()
+// est deployment cost: 38718760000000000 wei
 
 contract Remittance is Killable{
 
@@ -19,7 +20,8 @@ contract Remittance is Killable{
 
 
 	event LogRemit(address indexed sender, bytes32 indexed hashCode, uint256 indexed value, uint256 deadline);
-	event LogRetrieve(address indexed retriever, bytes32 indexed hashCode, uint256 indexed value);
+	event LogRetrieve(address indexed retriever, bytes32 indexed hashCode, uint256 indexed value, uint256 timestamp);
+	event LogCancel(address indexed sender, bytes32 indexed hashCode, uint256 indexed value, uint256 timestamp);
 	event LogKilledWithdrawal(address indexed account, uint256 indexed value);
 
 	using SafeMath for uint256;
@@ -37,7 +39,6 @@ contract Remittance is Killable{
         returns (bool)
     {
 		require(msg.value > 0, "Cannot remit 0.");
-		require(remittances[hashed].value == 0, "Cannot overwrite unretreived value.");
 		require(deadline <= maxDeadline, "Deadline exceeds maximum allowed.");
 		require(remittances[hashed].deadline == 0, "Hash has been used before.");
         Entry memory remitted;
@@ -50,29 +51,43 @@ contract Remittance is Killable{
         return true;
     }
 
-    function retrieve(string memory codeA, string memory codeB)
+    function retrieve(string memory codeA)
         public
 		whenAlive
 		whenNotPaused
     {
-        bytes32 hashed = hashIt(codeA, codeB);
+        bytes32 hashed = hashIt(codeA, msg.sender);
         Entry memory remitted = remittances[hashed];
 		uint256 value = remitted.value;
         require(value > 0, "Nothing to retrieve.");
-		if (now >= remitted.deadline) {
-			require(msg.sender == remitted.sender, 'Code expired. Only sender can retrieve.');
-		}else {
-			require (msg.sender != remitted.sender, 'Sender cannot retrieve before code expires.');
-		}
+		require(now <= remitted.deadline, 'Remittance expired. Sender needs to cancel remittance.');
 
 		remitted.value = 0;
 		remittances[hashed] = remitted;
 
-		emit LogRetrieve(msg.sender, hashed, value);
+		emit LogRetrieve(msg.sender, hashed, value, now);
 		msg.sender.transfer(value);
     }
 
-	function hashIt(string memory codeA, string memory codeB)
+	function cancel(bytes32 hashed)
+		public
+		whenAlive
+		whenNotPaused
+	{
+		Entry memory remitted = remittances[hashed];
+		uint256 value = remitted.value;
+		require(value > 0, 'Nothing to cancel.');
+		require(now > remitted.deadline, 'Remittance still live. Cannot cancel.');
+		require(msg.sender == remitted.sender, 'Can only be cancelled by original sender.');
+
+		remitted.value = 0;
+		remittances[hashed] = remitted;
+
+		emit LogCancel(msg.sender, hashed, value, now);
+		msg.sender.transfer(value);
+	}
+
+	function hashIt(string memory codeA, address codeB)
 		public
 		view
 		returns (bytes32)
