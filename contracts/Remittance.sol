@@ -16,13 +16,17 @@ contract Remittance is Killable{
     }
 
     mapping (bytes32 => Entry) remittances;
-	uint256 maxDeadline = 172800; // 2days;
+	uint256 public maxDeadline = 172800; // 2 days
+	uint256 feePot;
+	uint256 public fee = 0.03 ether; // flat fee
 
 
 	event LogRemit(address indexed sender, bytes32 indexed hashCode, uint256 indexed value, uint256 deadline);
 	event LogRetrieve(address indexed retriever, bytes32 indexed hashCode, uint256 indexed value, uint256 timestamp);
 	event LogCancel(address indexed sender, bytes32 indexed hashCode, uint256 indexed value, uint256 timestamp);
+	event LogGetFeePot(address indexed account, uint256 indexed value, uint256 indexed timestamp);
 	event LogKilledWithdrawal(address indexed account, uint256 indexed value);
+
 
 	using SafeMath for uint256;
 	//add, sub, mul, div, mod
@@ -38,11 +42,12 @@ contract Remittance is Killable{
 		whenNotPaused
         returns (bool)
     {
-		require(msg.value > 0, "Cannot remit 0.");
+		require(msg.value > fee, "Below minimum remittance amount.");
 		require(deadline <= maxDeadline, "Deadline exceeds maximum allowed.");
 		require(remittances[hashed].deadline == 0, "Hash has been used before.");
         Entry memory remitted;
-		remitted.value = msg.value;
+		remitted.value = msg.value.sub(fee);
+		feePot = feePot.add(fee);
 		remitted.deadline = deadline.add(now);
 		remitted.sender = msg.sender;
 		remittances[hashed] = remitted;
@@ -84,6 +89,18 @@ contract Remittance is Killable{
 		remittances[hashed] = remitted;
 
 		emit LogCancel(msg.sender, hashed, value, now);
+		msg.sender.transfer(value);
+	}
+
+	function getFeePot()
+		public
+		whenAlive
+		onlyPauser
+	{
+		uint256 value = feePot;
+		feePot = 0;
+
+		emit LogGetFeePot(msg.sender, value, now);
 		msg.sender.transfer(value);
 	}
 
