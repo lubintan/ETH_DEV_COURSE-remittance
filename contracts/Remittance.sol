@@ -16,15 +16,17 @@ contract Remittance is Killable{
     }
 
     mapping (bytes32 => Entry) remittances;
-	uint256 public maxDeadline = 172800; // 2 days
-	uint256 feePot;
-	uint256 public fee = 0.03 ether; // flat fee
+	mapping (address => uint256) feePot;
+	uint256 public constant maxDeadline = 172800; // 2 days
+	uint256 public constant fee = 0.03 ether; // flat fee
+	address owner;
 
 
 	event LogRemit(address indexed sender, bytes32 indexed hashCode, uint256 indexed value, uint256 deadline);
 	event LogRetrieve(address indexed retriever, bytes32 indexed hashCode, uint256 indexed value, uint256 timestamp);
 	event LogCancel(address indexed sender, bytes32 indexed hashCode, uint256 indexed value, uint256 timestamp);
-	event LogGetFeePot(address indexed account, uint256 indexed value, uint256 indexed timestamp);
+	event LogGetFeePot(address indexed account, uint256 indexed value);
+	event LogTransferOwnership(address indexed oldOwner, address indexed newOwner);
 	event LogKilledWithdrawal(address indexed account, uint256 indexed value);
 
 
@@ -33,7 +35,15 @@ contract Remittance is Killable{
 
     constructor()
     public
-    {}
+    {
+		owner = msg.sender;
+	}
+
+	modifier onlyOwner()
+	{
+		require (msg.sender == owner);
+		_;
+	}
 
     function remit(bytes32 hashed, uint256 deadline)
         public
@@ -47,7 +57,7 @@ contract Remittance is Killable{
 		require(remittances[hashed].deadline == 0, "Hash has been used before.");
         Entry memory remitted;
 		remitted.value = msg.value.sub(fee);
-		feePot = feePot.add(fee);
+		feePot[owner] = feePot[owner].add(fee);
 		remitted.deadline = deadline.add(now);
 		remitted.sender = msg.sender;
 		remittances[hashed] = remitted;
@@ -56,19 +66,17 @@ contract Remittance is Killable{
         return true;
     }
 
-    function retrieve(string memory codeA)
+    function retrieve(bytes32 codeA)
         public
 		whenAlive
 		whenNotPaused
     {
         bytes32 hashed = hashIt(codeA, msg.sender);
-        Entry memory remitted = remittances[hashed];
-		uint256 value = remitted.value;
+		uint256 value = remittances[hashed].value;
         require(value > 0, "Nothing to retrieve.");
-		require(now <= remitted.deadline, 'Remittance expired. Sender needs to cancel remittance.');
 
-		remitted.value = 0;
-		remittances[hashed] = remitted;
+		remittances[hashed].value = 0;
+		remittances[hashed].sender = address(0);
 
 		emit LogRetrieve(msg.sender, hashed, value, now);
 		msg.sender.transfer(value);
@@ -86,6 +94,7 @@ contract Remittance is Killable{
 		require(msg.sender == remitted.sender, 'Can only be cancelled by original sender.');
 
 		remitted.value = 0;
+		remitted.sender = address(0);
 		remittances[hashed] = remitted;
 
 		emit LogCancel(msg.sender, hashed, value, now);
@@ -95,16 +104,17 @@ contract Remittance is Killable{
 	function getFeePot()
 		public
 		whenAlive
-		onlyPauser
 	{
-		uint256 value = feePot;
-		feePot = 0;
+		uint256 value = feePot[msg.sender];
+		require(value > 0, 'Cannot withdraw 0 value.');
 
-		emit LogGetFeePot(msg.sender, value, now);
+		feePot[msg.sender] = 0;
+
+		emit LogGetFeePot(msg.sender, value);
 		msg.sender.transfer(value);
 	}
 
-	function hashIt(string memory codeA, address codeB)
+	function hashIt(bytes32 codeA, address codeB)
 		public
 		view
 		returns (bytes32)
@@ -112,10 +122,26 @@ contract Remittance is Killable{
 		return keccak256(abi.encodePacked(codeA, codeB, address(this)));
 	}
 
+	function transferOwnership(address newOwner)
+		public
+		whenPaused
+		whenAlive
+		onlyOwner
+	{
+		require (newOwner != address(0), 'New owner cannot be non-existent.');
+
+		if (!isPauser(newOwner)){
+			addPauser(newOwner);
+		}
+
+		emit LogTransferOwnership(owner, newOwner);
+		owner = newOwner;
+	}
+
 	function killedWithdrawal()
 		public
-		onlyPauser
 		whenKilled
+		onlyOwner
 	{
 		uint256 contractBalance = address(this).balance;
 		address payable withdrawer = msg.sender;
