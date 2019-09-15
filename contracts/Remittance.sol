@@ -47,7 +47,7 @@ contract Remittance is Killable{
         _;
     }
 
-    function remit(bytes32 hashed, uint256 deadline)
+    function remit(bytes32 hashed, uint256 deadline, uint256 feeLimit)
         public
         payable
         whenAlive
@@ -57,6 +57,8 @@ contract Remittance is Killable{
         require(msg.value > fee, "Below minimum remittance amount.");
         require(deadline <= maxDeadline, "Deadline exceeds maximum allowed.");
         require(remittances[hashed].deadline == 0, "Hash has been used before.");
+        require(feeLimit >= fee, "Current fee exceeds expected fee.");
+
         Entry memory remitted;
         remitted.value = msg.value.sub(fee);
         feePot[owner] = feePot[owner].add(fee);
@@ -124,7 +126,6 @@ contract Remittance is Killable{
 
     function transferOwnership(address newOwner)
         public
-        whenPaused
         whenAlive
         onlyOwner
     {
@@ -140,11 +141,10 @@ contract Remittance is Killable{
 
     function setFee(uint newFee)
         public
-        whenPaused
         whenAlive
         onlyOwner
     {
-        require(fee != newFee, 'Fee is already at esired value.');
+        require(fee != newFee, 'Fee is already at desired value.');
         fee = newFee;
         emit LogSetFee(msg.sender, newFee);
     }
