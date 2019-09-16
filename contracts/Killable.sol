@@ -8,33 +8,33 @@ import './local/Pausable.sol';
 
 contract Killable is Pausable{
 
-	bool private killed;
+    bool private killed;
     event LogKilled(address account);
 
-	constructor ()
-	public
-	{
-		killed = false;
+    constructor ()
+    public
+    {
+        killed = false;
     }
 
-	function kill()
-		public
-		onlyPauser
-		whenPaused
-	{
-		killed = true;
-		emit LogKilled(msg.sender);
-	}
+    function kill()
+        public
+        onlyPauser
+        whenPaused
+    {
+        killed = true;
+        emit LogKilled(msg.sender);
+    }
 
-	modifier whenAlive()
-	{
-		require(!killed, "Killable: killed");
-		_;
-	}
+    modifier whenAlive()
+    {
+        require(!killed, "Killable: killed");
+        _;
+    }
 
-	modifier whenKilled()
-	{
-		require(killed, "Killable: not killed");
-		_;
-	}
+    modifier whenKilled()
+    {
+        require(killed, "Killable: not killed");
+        _;
+    }
 }
