@@ -1,7 +1,7 @@
 pragma solidity 0.5.10;
 
-import 'openzeppelin-solidity/contracts/math/SafeMath.sol';
-import 'openzeppelin-solidity/contracts/lifecycle/Pausable.sol';
+import './local/SafeMath.sol';
+import './local/Pausable.sol';
 
 //version: openzeppelin-solidity@2.3.0
 //functions: isPauser(address), addPauser(address), renouncePauser(), pause(), unpause(), paused()
