@@ -19,7 +19,7 @@ contract Remittance is Killable{
     mapping (address => uint256) feePot;
     uint256 public constant maxDeadline = 2 days; // 172800 seconds
     uint256 public fee;
-    address owner;
+    address public owner;
 
 
     event LogRemit(address indexed sender, bytes32 indexed hashCode, uint256 value, uint256 deadline);
@@ -34,11 +34,11 @@ contract Remittance is Killable{
     using SafeMath for uint256;
     //add, sub, mul, div, mod
 
-    constructor()
-    public
+    constructor(uint256 initialFee)
+        public
     {
         owner = msg.sender;
-        fee = 0.003 ether;
+        fee = initialFee;
     }
 
     modifier onlyOwner()
@@ -52,22 +52,23 @@ contract Remittance is Killable{
         payable
         whenAlive
         whenNotPaused
-        returns (bool)
     {
-        require(msg.value > fee, "Below minimum remittance amount.");
+        uint256 currentFee = fee;
+        address thisOwner = owner;
+
+        require(msg.value > currentFee, "Below minimum remittance amount.");
         require(deadline <= maxDeadline, "Deadline exceeds maximum allowed.");
         require(remittances[userSubmittedHash].deadline == 0, "Hash has been used before.");
-        require(feeLimit >= fee, "Current fee exceeds expected fee.");
+        require(feeLimit >= currentFee, "Current fee exceeds expected fee.");
 
         Entry memory remitted;
-        remitted.value = msg.value.sub(fee);
-        feePot[owner] = feePot[owner].add(fee);
+        remitted.value = msg.value.sub(currentFee);
+        feePot[thisOwner] = feePot[thisOwner].add(currentFee);
         remitted.deadline = deadline.add(now);
         remitted.sender = msg.sender;
         remittances[userSubmittedHash] = remitted;
 
         emit LogRemit(msg.sender, userSubmittedHash, msg.value, remitted.deadline);
-        return true;
     }
 
     function retrieve(bytes32 retrieverPassword)
