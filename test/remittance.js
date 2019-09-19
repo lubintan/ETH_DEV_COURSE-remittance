@@ -6,7 +6,7 @@ const seqPrm = require("./sequentialPromise.js");
 const codeGen = require('./../app/js/codeGenerator.js');
 const generator = codeGen.generator;
 
-async function gasCost(txObj) {
+const gasCost = async function (txObj) {
     const gasUsed = bigNum(txObj.receipt.gasUsed);
     const txtx = await web3.eth.getTransaction(txObj.tx);
     const gasPrice = bigNum(txtx.gasPrice);
@@ -35,12 +35,12 @@ contract('Remittance', function(accounts){
     let remitCont, fee;
     
 
-    beforeEach("new contract deployment", async () => {
+    beforeEach("new contract deployment", async function() {
         remitCont = await Remittance.new(initialFee, { from: contractOwner });
         fee = bigNum(await remitCont.fee.call({ from: contractOwner }));
     });
 
-    it ("Same inputs give different hash for different contracts", async() =>{
+    it ("Same inputs give different hash for different contracts", async function(){
         const remitCont2 = await Remittance.new(initialFee, { from: contractOwner });
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
@@ -49,7 +49,7 @@ contract('Remittance', function(accounts){
         assert.notEqual(remittanceHashId, remittanceHashId2, "Same inputs give SAME hash for different contracts.");
     });
 
-    it ('Reverts if remitting with active period over active period limit.', async () => {
+    it ('Reverts if remitting with active period over active period limit.', async function() {
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
@@ -58,7 +58,7 @@ contract('Remittance', function(accounts){
         await truffleAssert.reverts(remitCont.remit(remittanceHashId, activePeriodLimit.add(bigNum(1)), fee, { from: sender, value: amountToSend }));
     });
 
-    it ("Reverts original sender cancel before deadline.", async () => {
+    it ("Reverts original sender cancel before deadline.", async function() {
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
@@ -68,7 +68,7 @@ contract('Remittance', function(accounts){
         await truffleAssert.reverts(remitCont.cancel(remittanceHashId, { from: sender }));
     });
     
-    it ("Allows cancel by original sender if deadline passed.", async () => {
+    it ("Allows cancel by original sender if deadline passed.", async function() {
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
@@ -101,7 +101,7 @@ contract('Remittance', function(accounts){
             senderFinal.sub(amountToSend).toString(10), 'Expected balance incorrect.');
     });
 
-    it ("Reverts remit below the minimum remittance value.", async () => {
+    it ("Reverts remit below the minimum remittance value.", async function() {
         const amountToSend = fee.sub(bigNum(1));
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
@@ -109,7 +109,7 @@ contract('Remittance', function(accounts){
         await truffleAssert.reverts(remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: amountToSend }));
     });
 
-    it ("Reverts remit with fee limit below current fee.", async() => {
+    it ("Reverts remit with fee limit below current fee.", async function() {
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
@@ -118,13 +118,13 @@ contract('Remittance', function(accounts){
         await truffleAssert.reverts(remitCont.remit(remittanceHashId, defaultActivePeriod, feeLimitBelow, { from: sender, value: amountToSend }));
     });
     
-    it ("Reverts 0 value retrieve.", async () => {
+    it ("Reverts 0 value retrieve.", async function() {
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
 
         await truffleAssert.reverts(remitCont.retrieve(passwordToGiveRetriever, { from: sender }));
     });
     
-    it ("Reverts remit to hash with existing value.", async () =>{
+    it ("Reverts remit to hash with existing value.", async function(){
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
@@ -133,7 +133,7 @@ contract('Remittance', function(accounts){
         await truffleAssert.reverts(remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: bigNum(web3.utils.toWei('1.77')) }));
     });
     
-    it ("Can remit and retrieve properly.", async () => {
+    it ("Can remit and retrieve properly.", async function() {
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
@@ -164,7 +164,7 @@ contract('Remittance', function(accounts){
             retrieverFinal.sub(amountToSend).toString(10), 'Expected balance incorrect.');
     });
 
-    it ("Owner can retrieve fees properly.", async () => {
+    it ("Owner can retrieve fees properly.", async function() {
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         let passwordToGiveRetriever, remittanceHashId;
         const numRemits = 7;
@@ -192,7 +192,7 @@ contract('Remittance', function(accounts){
             ownerFinal.sub(fee.mul(bigNum(numRemits))).toString(10), "Owner's expected balance incorrect.");
     });
 
-    it ("Old owner can retreive fees even after transferring ownership.", async () => {
+    it ("Old owner can retreive fees even after transferring ownership.", async function() {
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         let passwordToGiveRetriever, remittanceHashId;
         const numRemits = 7;
@@ -233,7 +233,7 @@ contract('Remittance', function(accounts){
             ownerFinal.sub(fee.mul(bigNum(numRemits))).toString(10), "Old owner's expected balance incorrect.");
     });
 
-    it ("New owner retrieves correct fees after transferring ownership.", async () => {
+    it ("New owner retrieves correct fees after transferring ownership.", async function() {
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         let passwordToGiveRetriever, remittanceHashId;
         const fee = bigNum(await remitCont.fee.call());
@@ -281,7 +281,7 @@ contract('Remittance', function(accounts){
             ownerFinal.sub(fee.mul(bigNum(numRemits))).toString(10), "New owner's expected balance incorrect.");
     });
 
-    it ("Reverts if remitting with previously used hash.", async () => {
+    it ("Reverts if remitting with previously used hash.", async function() {
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
@@ -293,7 +293,7 @@ contract('Remittance', function(accounts){
         truffleAssert.reverts(remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender2, value: amountToSend }));
     });
 
-    it ("Only owner can change fees.", async () => {
+    it ("Only owner can change fees.", async function() {
         const newFee = bigNum(web3.utils.toWei('0.5'));
 
         await truffleAssert.reverts(remitCont.setFee(newFee, { from: sender }));
@@ -314,7 +314,7 @@ contract('Remittance', function(accounts){
         
     });
 
-    it ("Reverts retrieving when contract paused.", async () =>{
+    it ("Reverts retrieving when contract paused.", async function(){
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
@@ -324,7 +324,7 @@ contract('Remittance', function(accounts){
         await truffleAssert.reverts(remitCont.retrieve(passwordToGiveRetriever, { from: retriever }));
     });
 
-    it ("Reverts remitting when contract is paused.", async () =>{
+    it ("Reverts remitting when contract is paused.", async function(){
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
@@ -333,28 +333,28 @@ contract('Remittance', function(accounts){
         await truffleAssert.reverts(remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: amountToSend }));
     });
 
-    it ("Reverts killing when contract is not paused.", async () => {
+    it ("Reverts killing when contract is not paused.", async function() {
         await truffleAssert.reverts(remitCont.kill({ from: sender }));
     });
 
-    it ("Reverts killing by non-pauser/owner.", async () => {
+    it ("Reverts killing by non-pauser/owner.", async function() {
         await remitCont.pause( {from: contractOwner });
         await truffleAssert.reverts(remitCont.kill({ from: retriever }));
     });
 
-    it ("Reverts post-killing withdrawal by non-owner.", async () => {
+    it ("Reverts post-killing withdrawal by non-owner.", async function() {
         await remitCont.pause( {from: contractOwner });
         await remitCont.kill( {from: contractOwner });
         await truffleAssert.reverts(remitCont.killedWithdrawal({ from: retriever }));
     });
 
-    it ("Reverts post-killing withdrawal of 0 balance.", async () => {
+    it ("Reverts post-killing withdrawal of 0 balance.", async function() {
         await remitCont.pause({ from: contractOwner });
         await remitCont.kill({ from: contractOwner });
         await truffleAssert.reverts(remitCont.killedWithdrawal({ from: contractOwner }));
     });
 
-    it ("Post-killing withdrawal moves funds to the owner correctly.", async () => {
+    it ("Post-killing withdrawal moves funds to the owner correctly.", async function() {
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
@@ -378,7 +378,7 @@ contract('Remittance', function(accounts){
             contractOwnerBalAfter.sub(amountToSend).toString(10), "David's expected balance incorrect.");
     });
 
-    it ("Post-killing contract functions revert upon invocation.", async () => {
+    it ("Post-killing contract functions revert upon invocation.", async function() {
         const amountToSend = bigNum(web3.utils.toWei('0.01'));
         const passwordToGiveRetriever = web3.utils.fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
