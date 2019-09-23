@@ -1,15 +1,13 @@
 const truffleAssert = require('truffle-assertions');
 const Remittance = artifacts.require("./Remittance.sol");
-// const web3 = require("web3");
-const bigNum = web3.utils.toBN;
-const seqPrm = require("./sequentialPromise.js");
+const { toBN, toWei, fromAscii } = web3.utils;
 const codeGen = require('./../app/js/codeGenerator.js');
 const generator = codeGen.generator;
 
 const gasCost = async function (txObj) {
-    const gasUsed = bigNum(txObj.receipt.gasUsed);
+    const gasUsed = toBN(txObj.receipt.gasUsed);
     const txtx = await web3.eth.getTransaction(txObj.tx);
-    const gasPrice = bigNum(txtx.gasPrice);
+    const gasPrice = toBN(txtx.gasPrice);
 
     return gasPrice.mul(gasUsed);
 }
@@ -31,18 +29,18 @@ contract('Remittance', function(accounts){
     
     const [sender, retriever, contractOwner, sender2] = accounts;
     const defaultActivePeriod = 3600; //1 hour
-    const initialFee = bigNum(web3.utils.toWei('0.003'));
+    const initialFee = toBN(toWei('0.003'));
     let remitCont, fee;
     
 
     beforeEach("new contract deployment", async function() {
         remitCont = await Remittance.new(initialFee, { from: contractOwner });
-        fee = bigNum(await remitCont.fee.call({ from: contractOwner }));
+        fee = toBN(await remitCont.fee.call({ from: contractOwner }));
     });
 
     it ("Same inputs give different hash for different contracts", async function(){
         const remitCont2 = await Remittance.new(initialFee, { from: contractOwner });
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
         const remittanceHashId2 = await remitCont2.hashIt(passwordToGiveRetriever, retriever);
 
@@ -50,17 +48,17 @@ contract('Remittance', function(accounts){
     });
 
     it ('Reverts if remitting with active period over active period limit.', async function() {
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const amountToSend = toBN(toWei('0.01'));
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
-        const activePeriodLimit = bigNum(await remitCont.maxActivePeriod.call());
+        const activePeriodLimit = toBN(await remitCont.maxActivePeriod.call());
 
-        await truffleAssert.reverts(remitCont.remit(remittanceHashId, activePeriodLimit.add(bigNum(1)), fee, { from: sender, value: amountToSend }));
+        await truffleAssert.reverts(remitCont.remit(remittanceHashId, activePeriodLimit.add(toBN(1)), fee, { from: sender, value: amountToSend }));
     });
 
     it ("Reverts original sender cancel before deadline.", async function() {
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const amountToSend = toBN(toWei('0.01'));
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
 
         await remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: amountToSend });
@@ -69,137 +67,142 @@ contract('Remittance', function(accounts){
     });
     
     it ("Allows cancel by original sender if deadline passed.", async function() {
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const amountToSend = toBN(toWei('0.01'));
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
 
         const txObjRemit = await remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: amountToSend });
 
-        assert.strictEqual(txObjRemit.logs[0].event, 'LogRemit', 'Wrong event emitted');
-        assert.strictEqual(txObjRemit.logs[0].args.sender, sender, 'Remit Log Sender Error');
-        assert.strictEqual(txObjRemit.logs[0].args.hashCode, remittanceHashId, 'Remit Log HashCode Error');
-        assert.strictEqual(txObjRemit.logs[0].args.value.toString(10), amountToSend.toString(10), 'Remit Log Value Error');
-        assert.strictEqual(txObjRemit.logs[0].args.deadline.toNumber(10), 
+        const remitEvent = txObjRemit.logs[0];
+        assert.strictEqual(remitEvent.event, 'LogRemit', 'Wrong event emitted');
+        assert.strictEqual(remitEvent.args.sender, sender, 'Remit Log Sender Error');
+        assert.strictEqual(remitEvent.args.hashCode, remittanceHashId, 'Remit Log HashCode Error');
+        assert.strictEqual(remitEvent.args.value.toString(10), amountToSend.toString(10), 'Remit Log Value Error');
+        assert.strictEqual(remitEvent.args.deadline.toNumber(10), 
             (defaultActivePeriod + (await web3.eth.getBlock('latest')).timestamp), 'Remit Log Deadline Error');
 
         await timeTravel(3600*48 + 1);
 
-        const senderInitial = bigNum(await web3.eth.getBalance(sender));
+        const senderInitial = toBN(await web3.eth.getBalance(sender));
         const txObjCancel = await remitCont.cancel(remittanceHashId, { from: sender });
 
-        assert.strictEqual(txObjCancel.logs[0].event, 'LogCancel', 'Wrong event emitted');
-        assert.strictEqual(txObjCancel.logs[0].args.sender, sender, 'Cancel Log Sender Error');
-        assert.strictEqual(txObjCancel.logs[0].args.hashCode, remittanceHashId, 'Cancel Log HashCode Error');
-        assert.strictEqual(txObjCancel.logs[0].args.value.toString(10), amountToSend.sub(fee).toString(10), 'Cancel Log Value Error');
-        assert.strictEqual(txObjCancel.logs[0].args.timestamp.toNumber(10), 
+        const cancelEvent = txObjCancel.logs[0];
+        assert.strictEqual(cancelEvent.event, 'LogCancel', 'Wrong event emitted');
+        assert.strictEqual(cancelEvent.args.sender, sender, 'Cancel Log Sender Error');
+        assert.strictEqual(cancelEvent.args.hashCode, remittanceHashId, 'Cancel Log HashCode Error');
+        assert.strictEqual(cancelEvent.args.value.toString(10), amountToSend.sub(fee).toString(10), 'Cancel Log Value Error');
+        assert.strictEqual(cancelEvent.args.timestamp.toNumber(10), 
              (await web3.eth.getBlock('latest')).timestamp, 'Cancel Log Timestamp Error');
 
         const senderGasCost = await gasCost(txObjCancel);
-        const senderFinal = bigNum(await web3.eth.getBalance(sender));
+        const senderFinal = toBN(await web3.eth.getBalance(sender));
         
         assert.strictEqual(senderInitial.sub(senderGasCost).sub(fee).toString(10),
             senderFinal.sub(amountToSend).toString(10), 'Expected balance incorrect.');
     });
 
     it ("Reverts remit below the minimum remittance value.", async function() {
-        const amountToSend = fee.sub(bigNum(1));
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const amountToSend = fee.sub(toBN(1));
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
 
         await truffleAssert.reverts(remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: amountToSend }));
     });
 
     it ("Reverts remit with fee limit below current fee.", async function() {
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const amountToSend = toBN(toWei('0.01'));
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
-        const feeLimitBelow = fee.sub(bigNum(1));
+        const feeLimitBelow = fee.sub(toBN(1));
 
         await truffleAssert.reverts(remitCont.remit(remittanceHashId, defaultActivePeriod, feeLimitBelow, { from: sender, value: amountToSend }));
     });
     
     it ("Reverts 0 value retrieve.", async function() {
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const passwordToGiveRetriever = fromAscii(generator());
 
         await truffleAssert.reverts(remitCont.retrieve(passwordToGiveRetriever, { from: sender }));
     });
     
     it ("Reverts remit to hash with existing value.", async function(){
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const amountToSend = toBN(toWei('0.01'));
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
 
         await remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: amountToSend });
-        await truffleAssert.reverts(remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: bigNum(web3.utils.toWei('1.77')) }));
+        await truffleAssert.reverts(remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: toBN(toWei('1.77')) }));
     });
     
     it ("Can remit and retrieve properly.", async function() {
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const amountToSend = toBN(toWei('0.01'));
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
 
         const txObjRemit = await remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: amountToSend });
 
-        assert.strictEqual(txObjRemit.logs[0].event, 'LogRemit', 'Wrong event emitted');
-        assert.strictEqual(txObjRemit.logs[0].args.sender, sender, 'Remit Log Sender Error');
-        assert.strictEqual(txObjRemit.logs[0].args.hashCode, remittanceHashId, 'Remit Log HashCode Error');
-        assert.strictEqual(txObjRemit.logs[0].args.value.toString(10), amountToSend.toString(10), 'Remit Log Value Error');
-        assert.strictEqual(txObjRemit.logs[0].args.deadline.toNumber(10), 
+        const remitEvent = txObjRemit.logs[0];
+        assert.strictEqual(remitEvent.event, 'LogRemit', 'Wrong event emitted');
+        assert.strictEqual(remitEvent.args.sender, sender, 'Remit Log Sender Error');
+        assert.strictEqual(remitEvent.args.hashCode, remittanceHashId, 'Remit Log HashCode Error');
+        assert.strictEqual(remitEvent.args.value.toString(10), amountToSend.toString(10), 'Remit Log Value Error');
+        assert.strictEqual(remitEvent.args.deadline.toNumber(10), 
             (defaultActivePeriod + (await web3.eth.getBlock('latest')).timestamp), 'Remit Log Deadline Error');
 
-        const retrieverInitial = bigNum(await web3.eth.getBalance(retriever));
+        const retrieverInitial = toBN(await web3.eth.getBalance(retriever));
         const txObjRet = await remitCont.retrieve(passwordToGiveRetriever, { from: retriever });
 
-        assert.strictEqual(txObjRet.logs[0].event, 'LogRetrieve', 'Wrong event emitted');
-        assert.strictEqual(txObjRet.logs[0].args.retriever, retriever, 'Retrieve Log Retriever Error');
-        assert.strictEqual(txObjRet.logs[0].args.hashCode, remittanceHashId, 'Retrieve Log HashCode Error');
-        assert.strictEqual(txObjRet.logs[0].args.value.toString(10), amountToSend.sub(fee).toString(10), 'Retrieve Log Value Error');
-        assert.strictEqual(txObjRet.logs[0].args.timestamp.toNumber(10), 
+        const retEvent = txObjRet.logs[0];
+        assert.strictEqual(retEvent.event, 'LogRetrieve', 'Wrong event emitted');
+        assert.strictEqual(retEvent.args.retriever, retriever, 'Retrieve Log Retriever Error');
+        assert.strictEqual(retEvent.args.hashCode, remittanceHashId, 'Retrieve Log HashCode Error');
+        assert.strictEqual(retEvent.args.value.toString(10), amountToSend.sub(fee).toString(10), 'Retrieve Log Value Error');
+        assert.strictEqual(retEvent.args.timestamp.toNumber(10), 
              (await web3.eth.getBlock('latest')).timestamp, 'Retrieve Log Timestamp Error');
 
         const retrieverGasCost = await gasCost(txObjRet);
-        const retrieverFinal = bigNum(await web3.eth.getBalance(retriever));
+        const retrieverFinal = toBN(await web3.eth.getBalance(retriever));
         
         assert.strictEqual(retrieverInitial.sub(retrieverGasCost).sub(fee).toString(10),
             retrieverFinal.sub(amountToSend).toString(10), 'Expected balance incorrect.');
     });
 
     it ("Owner can retrieve fees properly.", async function() {
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
+        const amountToSend = toBN(toWei('0.01'));
         let passwordToGiveRetriever, remittanceHashId;
         const numRemits = 7;
         
         let i = 0;
         while(i < numRemits){
-            passwordToGiveRetriever = web3.utils.fromAscii(generator());
+            passwordToGiveRetriever = fromAscii(generator());
             remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
             await remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: amountToSend });
             await remitCont.retrieve(passwordToGiveRetriever, { from: retriever });
             i = i + 1;
         }
 
-        const ownerInitial = bigNum(await web3.eth.getBalance(contractOwner));
+        const ownerInitial = toBN(await web3.eth.getBalance(contractOwner));
         const txObjFee = await remitCont.withdrawFeePot({ from: contractOwner });
 
-        assert.strictEqual(txObjFee.logs[0].event, 'LogWithdrawFeePot', 'Wrong event emitted');
-        assert.strictEqual(txObjFee.logs[0].args.account, contractOwner, 'Fee Pot Log Account Error');
-        assert.strictEqual(txObjFee.logs[0].args.value.toString(10), fee.mul(bigNum(numRemits)).toString(10), 'Fee Pot Log Value Error');
+        const feeEvent = txObjFee.logs[0];
+        assert.strictEqual(feeEvent.event, 'LogWithdrawFeePot', 'Wrong event emitted');
+        assert.strictEqual(feeEvent.args.account, contractOwner, 'Fee Pot Log Account Error');
+        assert.strictEqual(feeEvent.args.value.toString(10), fee.mul(toBN(numRemits)).toString(10), 'Fee Pot Log Value Error');
 
         const ownerGasCost = await gasCost(txObjFee);
-        const ownerFinal = bigNum(await web3.eth.getBalance(contractOwner));
+        const ownerFinal = toBN(await web3.eth.getBalance(contractOwner));
 
         await assert.strictEqual(ownerInitial.sub(ownerGasCost).toString(10),
-            ownerFinal.sub(fee.mul(bigNum(numRemits))).toString(10), "Owner's expected balance incorrect.");
+            ownerFinal.sub(fee.mul(toBN(numRemits))).toString(10), "Owner's expected balance incorrect.");
     });
 
     it ("Old owner can retreive fees even after transferring ownership.", async function() {
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
+        const amountToSend = toBN(toWei('0.01'));
         let passwordToGiveRetriever, remittanceHashId;
         const numRemits = 7;
         
         let i = 0;
         while(i < numRemits){
-            passwordToGiveRetriever = web3.utils.fromAscii(generator());
+            passwordToGiveRetriever = fromAscii(generator());
             remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
             await remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: amountToSend });
             await remitCont.retrieve(passwordToGiveRetriever, { from: retriever });
@@ -210,36 +213,39 @@ contract('Remittance', function(accounts){
 
         const txObjTransfer = await remitCont.transferOwnership(sender, { from: contractOwner });
 
-        assert.strictEqual(txObjTransfer.logs[0].event, 'PauserAdded', 'Wrong event emitted');
-        assert.strictEqual(txObjTransfer.logs[0].args.account, sender, 'Pauser Log New Pauser Error');
+        const transferEvent = txObjTransfer.logs[0];
+        assert.strictEqual(transferEvent.event, 'PauserAdded', 'Wrong event emitted');
+        assert.strictEqual(transferEvent.args.account, sender, 'Pauser Log New Pauser Error');
 
-        assert.strictEqual(txObjTransfer.logs[1].event, 'LogTransferOwnership', 'Wrong event emitted');
-        assert.strictEqual(txObjTransfer.logs[1].args.oldOwner, contractOwner, 'Transfer Log Old Owner Error');
-        assert.strictEqual(txObjTransfer.logs[1].args.newOwner, sender, 'Transfer Log New Owner Error');
+        const transferEvent2 = txObjTransfer.logs[1];
+        assert.strictEqual(transferEvent2.event, 'LogTransferOwnership', 'Wrong event emitted');
+        assert.strictEqual(transferEvent2.args.oldOwner, contractOwner, 'Transfer Log Old Owner Error');
+        assert.strictEqual(transferEvent2.args.newOwner, sender, 'Transfer Log New Owner Error');
 
         await remitCont.unpause({ from: sender });
 
-        const ownerInitial = bigNum(await web3.eth.getBalance(contractOwner));
+        const ownerInitial = toBN(await web3.eth.getBalance(contractOwner));
         const txObjFee = await remitCont.withdrawFeePot({ from: contractOwner });
 
-        assert.strictEqual(txObjFee.logs[0].event, 'LogWithdrawFeePot', 'Wrong event emitted');
-        assert.strictEqual(txObjFee.logs[0].args.account, contractOwner, 'Fee Pot Log Account Error');
-        assert.strictEqual(txObjFee.logs[0].args.value.toString(10), fee.mul(bigNum(numRemits)).toString(10), 'Fee Pot Log Value Error');
+        const feeEvent = txObjFee.logs[0];
+        assert.strictEqual(feeEvent.event, 'LogWithdrawFeePot', 'Wrong event emitted');
+        assert.strictEqual(feeEvent.args.account, contractOwner, 'Fee Pot Log Account Error');
+        assert.strictEqual(feeEvent.args.value.toString(10), fee.mul(toBN(numRemits)).toString(10), 'Fee Pot Log Value Error');
 
         const ownerGasCost = await gasCost(txObjFee);
-        const ownerFinal = bigNum(await web3.eth.getBalance(contractOwner));
+        const ownerFinal = toBN(await web3.eth.getBalance(contractOwner));
 
         await assert.strictEqual(ownerInitial.sub(ownerGasCost).toString(10),
-            ownerFinal.sub(fee.mul(bigNum(numRemits))).toString(10), "Old owner's expected balance incorrect.");
+            ownerFinal.sub(fee.mul(toBN(numRemits))).toString(10), "Old owner's expected balance incorrect.");
     });
 
     it ("New owner retrieves correct fees after transferring ownership.", async function() {
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
+        const amountToSend = toBN(toWei('0.01'));
         let passwordToGiveRetriever, remittanceHashId;
-        const fee = bigNum(await remitCont.fee.call());
+        const fee = toBN(await remitCont.fee.call());
         const numRemits = 7;
 
-        passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        passwordToGiveRetriever = fromAscii(generator());
         remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
         await remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: amountToSend });
         await remitCont.retrieve(passwordToGiveRetriever, { from: retriever });
@@ -247,43 +253,44 @@ contract('Remittance', function(accounts){
         await remitCont.pause({ from: contractOwner });
         const txObjTransfer = await remitCont.transferOwnership(sender, { from: contractOwner });
 
-        assert.strictEqual(txObjTransfer.logs[0].event, 'PauserAdded', 'Wrong event emitted');
-        assert.strictEqual(txObjTransfer.logs[0].args.account, sender, 'Pauser Log New Pauser Error');
+        const transferEvent = txObjTransfer.logs[0];
+        assert.strictEqual(transferEvent.event, 'PauserAdded', 'Wrong event emitted');
+        assert.strictEqual(transferEvent.args.account, sender, 'Pauser Log New Pauser Error');
 
-        assert.strictEqual(txObjTransfer.logs[1].event, 'LogTransferOwnership', 'Wrong event emitted');
-        assert.strictEqual(txObjTransfer.logs[1].args.oldOwner, contractOwner, 'Transfer Log Old Owner Error');
-        assert.strictEqual(txObjTransfer.logs[1].args.newOwner, sender, 'Transfer Log New Owner Error');
+        const transferEvent2 = txObjTransfer.logs[1];
+        assert.strictEqual(transferEvent2.event, 'LogTransferOwnership', 'Wrong event emitted');
+        assert.strictEqual(transferEvent2.args.oldOwner, contractOwner, 'Transfer Log Old Owner Error');
+        assert.strictEqual(transferEvent2.args.newOwner, sender, 'Transfer Log New Owner Error');
 
         await remitCont.unpause({ from: sender });
 
         let i = 0;
         while(i < numRemits){
-            passwordToGiveRetriever = web3.utils.fromAscii(generator());
+            passwordToGiveRetriever = fromAscii(generator());
             remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
             await remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender2, value: amountToSend });
             await remitCont.retrieve(passwordToGiveRetriever, { from: retriever });
             i = i + 1;
         }
 
-        const ownerInitial = bigNum(await web3.eth.getBalance(sender));
+        const ownerInitial = toBN(await web3.eth.getBalance(sender));
         const txObjFee = await remitCont.withdrawFeePot({ from: sender });
 
-        assert.strictEqual(txObjFee.logs[0].event, 'LogWithdrawFeePot', 'Wrong event emitted');
-        assert.strictEqual(txObjFee.logs[0].args.account, sender, 'Fee Pot Log Account Error');
-        assert.strictEqual(txObjFee.logs[0].args.value.toString(10), fee.mul(bigNum(numRemits)).toString(10), 'Fee Pot Log Value Error');
+        const feeEvent = txObjFee.logs[0];
+        assert.strictEqual(feeEvent.event, 'LogWithdrawFeePot', 'Wrong event emitted');
+        assert.strictEqual(feeEvent.args.account, sender, 'Fee Pot Log Account Error');
+        assert.strictEqual(feeEvent.args.value.toString(10), fee.mul(toBN(numRemits)).toString(10), 'Fee Pot Log Value Error');
 
         const ownerGasCost = await gasCost(txObjFee);
-        const ownerFinal = bigNum(await web3.eth.getBalance(sender));
-
-
+        const ownerFinal = toBN(await web3.eth.getBalance(sender));
 
         await assert.strictEqual(ownerInitial.sub(ownerGasCost).toString(10),
-            ownerFinal.sub(fee.mul(bigNum(numRemits))).toString(10), "New owner's expected balance incorrect.");
+            ownerFinal.sub(fee.mul(toBN(numRemits))).toString(10), "New owner's expected balance incorrect.");
     });
 
     it ("Reverts if remitting with previously used hash.", async function() {
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const amountToSend = toBN(toWei('0.01'));
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
 
         await remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: amountToSend });
@@ -294,7 +301,7 @@ contract('Remittance', function(accounts){
     });
 
     it ("Only owner can change fees.", async function() {
-        const newFee = bigNum(web3.utils.toWei('0.5'));
+        const newFee = toBN(toWei('0.5'));
 
         await truffleAssert.reverts(remitCont.setFee(newFee, { from: sender }));
 
@@ -302,11 +309,11 @@ contract('Remittance', function(accounts){
         assert.strictEqual(txObjSetFee.logs[0].args.account, contractOwner, 'Set Fee Log Account Error');
         assert.strictEqual(txObjSetFee.logs[0].args.newFee.toString(10), newFee.toString(10), 'Set Fee Log New Fee Error');
 
-        const currentFee = bigNum(await remitCont.fee.call());
+        const currentFee = toBN(await remitCont.fee.call());
         assert.strictEqual(currentFee.toString(10), newFee.toString(10), 'Fee incorrect after setting.')
 
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const amountToSend = toBN(toWei('0.01'));
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
 
         // test that remitting with old fee regets reverted.
@@ -315,8 +322,8 @@ contract('Remittance', function(accounts){
     });
 
     it ("Reverts retrieving when contract paused.", async function(){
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const amountToSend = toBN(toWei('0.01'));
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
         
         await remitCont.remit(remittanceHashId, defaultActivePeriod, fee, { from: sender, value: amountToSend });
@@ -325,8 +332,8 @@ contract('Remittance', function(accounts){
     });
 
     it ("Reverts remitting when contract is paused.", async function(){
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const amountToSend = toBN(toWei('0.01'));
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
 
         await remitCont.pause({ from: contractOwner });
@@ -355,32 +362,33 @@ contract('Remittance', function(accounts){
     });
 
     it ("Post-killing withdrawal moves funds to the owner correctly.", async function() {
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const amountToSend = toBN(toWei('0.01'));
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
         
         await remitCont.remit(remittanceHashId, defaultActivePeriod, fee, {from: sender, value: amountToSend});
         await remitCont.pause({ from: contractOwner });
         await remitCont.kill({ from: contractOwner });
 
-        const contractOwnerBalBefore = bigNum(await web3.eth.getBalance(contractOwner));
+        const contractOwnerBalBefore = toBN(await web3.eth.getBalance(contractOwner));
 
         const txObjKW = await remitCont.killedWithdrawal({ from: contractOwner });
 
-        assert.strictEqual(txObjKW.logs[0].event, 'LogKilledWithdrawal', 'Wrong event emitted');
-        assert.strictEqual(txObjKW.logs[0].args.account, contractOwner, 'Killed Withdrawal Log Account Error');
-        assert.strictEqual(txObjKW.logs[0].args.value.toString(10), amountToSend.toString(10), 'Killed Withdrawal Log Value Error');
+        const kwEvent = txObjKW.logs[0];
+        assert.strictEqual(kwEvent.event, 'LogKilledWithdrawal', 'Wrong event emitted');
+        assert.strictEqual(kwEvent.args.account, contractOwner, 'Killed Withdrawal Log Account Error');
+        assert.strictEqual(kwEvent.args.value.toString(10), amountToSend.toString(10), 'Killed Withdrawal Log Value Error');
     
         const contractOwnerGasCost = await gasCost(txObjKW);
-        const contractOwnerBalAfter = bigNum(await web3.eth.getBalance(contractOwner));
+        const contractOwnerBalAfter = toBN(await web3.eth.getBalance(contractOwner));
 
         assert.strictEqual(contractOwnerBalBefore.sub(contractOwnerGasCost).toString(10),
             contractOwnerBalAfter.sub(amountToSend).toString(10), "David's expected balance incorrect.");
     });
 
     it ("Post-killing contract functions revert upon invocation.", async function() {
-        const amountToSend = bigNum(web3.utils.toWei('0.01'));
-        const passwordToGiveRetriever = web3.utils.fromAscii(generator());
+        const amountToSend = toBN(toWei('0.01'));
+        const passwordToGiveRetriever = fromAscii(generator());
         const remittanceHashId = await remitCont.hashIt(passwordToGiveRetriever, retriever);
         
         await remitCont.remit(remittanceHashId, defaultActivePeriod, fee, {from: sender, value: amountToSend});
